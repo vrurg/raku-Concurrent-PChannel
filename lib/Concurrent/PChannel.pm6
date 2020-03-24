@@ -23,7 +23,7 @@ say $pchannel.receive; ‘low prio’
 
 =head1 DESCRIPTION
 
-Concurrent::PChannel implements concurrent channel where each item sent over the channel has a priority attached
+C<Concurrent::PChannel> implements concurrent channel where each item sent over the channel has a priority attached
 allowing items with higher priority to be pulled first from the channel even if they were sent later in time.
 
 For example, imagine there is a factory of devices supplying our input with different kind of events. Some event types
@@ -132,8 +132,8 @@ In this case before sending C<42> the class allocates 2 -> 4 -> 8 queues.
 
 Queue allocation code is the only place where locking is used.
 
-Use of C<priorities> parameter is recommended if really big number of priorities is expected. This might help in
-reducing the memory footprint of the code by preveting over-allocation of queues.
+Use of C<priorities> parameter is recommended if some really big number of priorities is expected. This might help in
+reducing the memory footprint of the code by preventing over-allocation of queues.
 
 =head2 C<send(Mu \item, Int:D $priority = 0)>
 
@@ -141,11 +141,11 @@ Send a C<item> using C<$priority>. If C<$priority> is omitted then default 0 is 
 
 =head2 C<receive>
 
-Receive an item from channel. If no data available and the channel is not drained then the method C<await>s for the next
-item. In other words, it soft-blocks its thread allowing the scheduler to reassing it to another task if necessary until
+Receive an item from channel. If no data available and the channel is not I<drained> then the method C<await> for the next
+item. In other words, it soft-blocks allowing the scheduler to reassing the thread onto another task if necessary until
 some data is ready for pick up.
 
-If the method is called on a drained channel then it returns a C<Failure> wrapped around C<X::PChannel::OpOnClosed>
+If the method is called on a I<drained> channel then it returns a C<Failure> wrapped around C<X::PChannel::OpOnClosed>
 exception with its C<op> attribute set to string I<"receive">.
 
 =head2 C<poll>
@@ -169,6 +169,27 @@ Returns C<True> if channel is marked as failed.
 =head2 C<Supply>
 
 Wraps C<receive> into a supplier.
+
+=head1 EXCEPTIONS
+
+Names is the documentation are given as the exception classes are exported.
+
+=head2 C<X::PChannel::Priorities>
+
+Thrown if wrong C<priorities> parameter passed to the method C<new>. Attribute C<priorities> contains the value passed.
+
+=head2 C<X::PChannel::NegativePriority>
+
+Thrown if a negative priority value has passed in from user code. Attribute C<prio> contains the value passed.
+
+=head2 C<X::PChannel::OpOnClosed>
+
+Thrown or passed in a C<Failure> when an operation is performed on a closed channel. Attribute C<op> contains the
+operation name.
+
+I<Note> that semantics of this exception is a bit different depending on the kind of operation attempted. For
+C<receive> this exception is used when channel is I<drained>. For C<send>, C<close>, and C<fail> it is thrown right away
+if channel is in I<closed> state.
 
 =head1 AUTHOR
 

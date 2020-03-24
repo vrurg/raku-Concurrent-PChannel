@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/vrurg/raku-Concurrent-PChannel.svg?branch=master)](https://travis-ci.org/vrurg/raku-Concurrent-PChannel)
+
 NAME
 ====
 
@@ -19,7 +21,7 @@ say $pchannel.receive; ‘low prio’
 DESCRIPTION
 ===========
 
-Concurrent::PChannel implements concurrent channel where each item sent over the channel has a priority attached allowing items with higher priority to be pulled first from the channel even if they were sent later in time.
+`Concurrent::PChannel` implements concurrent channel where each item sent over the channel has a priority attached allowing items with higher priority to be pulled first from the channel even if they were sent later in time.
 
 For example, imagine there is a factory of devices supplying our input with different kind of events. Some event types are considered critical and must be processed ASAP. And some are, say, informative and can be taken care of when we're idling. In code this could be implemented the following way:
 
@@ -122,7 +124,7 @@ In this case before sending `42` the class allocates 2 -> 4 -> 8 queues.
 
 Queue allocation code is the only place where locking is used.
 
-Use of `priorities` parameter is recommended if really big number of priorities is expected. This might help in reducing the memory footprint of the code by preveting over-allocation of queues.
+Use of `priorities` parameter is recommended if some really big number of priorities is expected. This might help in reducing the memory footprint of the code by preventing over-allocation of queues.
 
 `send(Mu \item, Int:D $priority = 0)`
 -------------------------------------
@@ -132,9 +134,9 @@ Send a `item` using `$priority`. If `$priority` is omitted then default 0 is use
 `receive`
 ---------
 
-Receive an item from channel. If no data available and the channel is not drained then the method `await`s for the next item. In other words, it soft-blocks its thread allowing the scheduler to reassing it to another task if necessary until some data is ready for pick up.
+Receive an item from channel. If no data available and the channel is not *drained* then the method `await` for the next item. In other words, it soft-blocks allowing the scheduler to reassing the thread onto another task if necessary until some data is ready for pick up.
 
-If the method is called on a drained channel then it returns a `Failure` wrapped around `X::PChannel::OpOnClosed` exception with its `op` attribute set to string *"receive"*.
+If the method is called on a *drained* channel then it returns a `Failure` wrapped around `X::PChannel::OpOnClosed` exception with its `op` attribute set to string *"receive"*.
 
 `poll`
 ------
@@ -160,6 +162,28 @@ Returns `True` if channel is marked as failed.
 --------
 
 Wraps `receive` into a supplier.
+
+EXCEPTIONS
+==========
+
+Names is the documentation are given as the exception classes are exported.
+
+`X::PChannel::Priorities`
+-------------------------
+
+Thrown if wrong `priorities` parameter passed to the method `new`. Attribute `priorities` contains the value passed.
+
+`X::PChannel::NegativePriority`
+-------------------------------
+
+Thrown if a negative priority value has passed in from user code. Attribute `prio` contains the value passed.
+
+`X::PChannel::OpOnClosed`
+-------------------------
+
+Thrown or passed in a `Failure` when an operation is performed on a closed channel. Attribute `op` contains the operation name.
+
+*Note* that semantics of this exception is a bit different depending on the kind of operation attempted. For `receive` this exception is used when channel is *drained*. For `send`, `close`, and `fail` it is thrown right away if channel is in *closed* state.
 
 AUTHOR
 ======

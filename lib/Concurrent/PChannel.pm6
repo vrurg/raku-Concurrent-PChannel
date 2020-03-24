@@ -185,6 +185,13 @@ use nqp;
 
 role NoData is export { };
 
+class X::PChannel::Priorities is Exception is export {
+    has $.priorities is required;
+    method message {
+        "Number of priorities is expected to be 1 or more, got " ~ $!priorities
+    }
+}
+
 class X::PChannel::NegativePriority is Exception is export {
     has $.prio is required;
     method message {
@@ -232,8 +239,8 @@ has $!max-prio-updated = -1;
 has $!pq-list;
 has Lock $!prio-lock .= new;
 
-submethod TWEAK(:$priorities = 1, |) {
-    die "Bad number of priorities in {self.^name} constructor: must be 1 or more but got {$priorities}" unless $priorities > 0;
+submethod TWEAK(Int:D :$priorities = 1, |) {
+    X::PChannel::Priorities.new(:$priorities).throw unless $priorities > 0;
     $!pq-list := nqp::list();
     self!pqueue($priorities - 1); # Pre-create priorities.
 }

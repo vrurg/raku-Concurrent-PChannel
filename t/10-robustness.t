@@ -4,12 +4,14 @@ use Concurrent::PChannel;
 
 plan 4;
 
-my $cpu-cores = $*KERNEL.cpu-cores;
-my $count = 100000;
-my $prios = 1000;
-my $senders = $cpu-cores;
-my $receivers = $cpu-cores;
+my $default-workers = %*ENV<ROBUST_WORKERS> || $*KERNEL.cpu-cores;
+my $count = %*ENV<ROBUST_ITEM_COUNT> || 100000;
+my $prios = %*ENV<ROBUST_PRIOS> || 1000;
+my $senders = $default-workers;
+my $receivers = $default-workers;
 my $expected = $senders * $count;
+
+diag "Using $senders senders, $receivers receivers on $count item over $prios priorities";
 
 my $pchannel = Concurrent::PChannel.new: :priorities($prios);
 my $pc-ready = Promise.new;

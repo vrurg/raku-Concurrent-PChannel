@@ -9,9 +9,8 @@ jobs:
       - image: tonyodell/rakudo-nightly:latest
 
     environment:
-        ROBUST_ITEM_COUNT: 10000
         ROBUST_REPORT_PROGRESS: YES
-        ROBUST_WORKERS: 4
+        ROBUST_WORKERS: 8
     
     working_directory: ~
 

@@ -11,7 +11,8 @@ my $senders = $default-workers;
 my $receivers = $default-workers;
 my $expected = $senders * $count;
 
-diag "Using $senders senders, $receivers receivers on $count item over $prios priorities";
+diag "Using $senders senders, $receivers receivers on $count item over $prios priorities"
+    if $*OUT.t;
 
 my $pchannel = Concurrent::PChannel.new: :priorities($prios);
 my $pc-ready = Promise.new;
@@ -64,7 +65,8 @@ for ^$senders -> $sender {
         await $pc-ready;
         my $st = now;
         for ^$count {
-            $pchannel.send: ($sender * $count + $_), $prios.rand.Int; # ($v mod $prios);
+            $pchannel.send: ($sender * $count + $_), $prios.rand.Int;
+            # $pchannel.send: ($sender * $count + $_), (($sender * $count + $_) mod $prios);
             ++⚛$pc-write-count;
         }
         my $et = now;

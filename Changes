@@ -2,5 +2,8 @@ Revision history for Concurrent-PChannel
 
 {{$NEXT}}
 
+0.0.2  2020-03-25T16:10:34-04:00
+    - Fixed a race condition
+
 0.0.1  2020-03-23T22:38:56-04:00
     - Initial version

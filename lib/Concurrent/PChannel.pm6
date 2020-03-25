@@ -1,5 +1,5 @@
 use v6.c;
-unit class Concurrent::PChannel:ver<0.0.1>:auth<github:vrurg>;
+unit class Concurrent::PChannel:ver<0.0.2>:auth<github:vrurg>;
 
 =begin pod
 

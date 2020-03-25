@@ -10,6 +10,7 @@ my $prios = %*ENV<ROBUST_PRIOS> || 1000;
 my $senders = $default-workers;
 my $receivers = $default-workers;
 my $expected = $senders * $count;
+my $report-progress = ? %*ENV<ROBUST_REPORT_PROGRESS>;
 
 diag "Using $senders senders, $receivers receivers on $count item over $prios priorities"
     if $*OUT.t;
@@ -36,6 +37,7 @@ for ^$receivers -> $rn {
             $v = $pchannel.receive;
             last unless $v ~~ Int;
             ++⚛$pc-read-count;
+            diag "Received: ", $pc-read-count if $report-progress && ($pc-read-count % 1000) == 0;
         }
         $v.so if $v ~~ Failure && $v.exception ~~ X::PChannel::OpOnClosed;
         my $et = now;
@@ -68,6 +70,7 @@ for ^$senders -> $sender {
             $pchannel.send: ($sender * $count + $_), $prios.rand.Int;
             # $pchannel.send: ($sender * $count + $_), (($sender * $count + $_) mod $prios);
             ++⚛$pc-write-count;
+            diag "Sent: ", $pc-write-count if $report-$report-progress && ($pc-write-count % 100) == 0;
         }
         my $et = now;
         cas $pc-write-total, { $_ + $et - $st }
@@ -100,6 +103,8 @@ is $pc-write-count, $expected, "sent the expected number of items";
 
 $pchannel.close;
 $channel.close;
+
+diag "All items ($pc-write-count) were sent" if $report-progress;
 
 my $write-ratio = $pc-write-total / $ch-write-total;
 ok ($write-ratio < 10), "send is not too slow comparing to Channel send (" ~ $write-ratio.fmt("%.2f") ~ " times slower)";

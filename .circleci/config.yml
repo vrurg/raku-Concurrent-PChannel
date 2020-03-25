@@ -7,6 +7,10 @@ jobs:
   build:
     docker:
       - image: tonyodell/rakudo-nightly:latest
+
+    environment:
+        ROBUST_ITEM_COUNT: 10000
+        ROBUST_REPORT_PROGRESS: YES
     
     working_directory: ~
 

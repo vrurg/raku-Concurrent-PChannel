@@ -2,7 +2,45 @@ use v6.c;
 use Test;
 use Concurrent::PChannel;
 
-plan 2;
+plan 3;
+
+subtest "Errors" => {
+    plan 6;
+
+    throws-like
+        { Concurrent::PChannel.new(:priorities(0)) },
+        X::PChannel::Priorities,
+        "constructor with wrong priorities throws X::PChannel::Priorities",
+        :priorities(0);
+
+    my $pchannel = Concurrent::PChannel.new;
+
+    throws-like
+        { $pchannel.send: 42, -42 },
+        X::PChannel::NegativePriority,
+        "use of negative priority throws X::PChannel::NegativePriority",
+        :prio(-42);
+
+    lives-ok { $pchannel.close }, "single close is fine";
+
+    throws-like
+        { $pchannel.send(42, 0) },
+        X::PChannel::OpOnClosed,
+        "send on closed throws X::PChannel::OpOnClosed",
+        :op('send');
+
+    fails-like
+        { $pchannel.receive },
+        X::PChannel::OpOnClosed,
+        "receive on close fails with X::PChannel::OpOnClosed",
+        :op('receive');
+
+    throws-like
+        { $pchannel.close },
+        X::PChannel::OpOnClosed,
+        "second close throws X::PChannel::OpOnClosed",
+        :op('close');
+}
 
 subtest "Count messages" => {
     plan 3;

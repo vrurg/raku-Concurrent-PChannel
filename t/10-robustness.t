@@ -13,7 +13,7 @@ my $expected = $senders * $count;
 my $report-progress = ? %*ENV<ROBUST_REPORT_PROGRESS>;
 
 diag "Using $senders senders, $receivers receivers on $count item over $prios priorities"
-    if $*OUT.t;
+    if $*OUT.t || $report-progress;
 
 my $pchannel = Concurrent::PChannel.new: :priorities($prios);
 my $pc-ready = Promise.new;

@@ -11,6 +11,7 @@ jobs:
     environment:
         ROBUST_ITEM_COUNT: 10000
         ROBUST_REPORT_PROGRESS: YES
+        ROBUST_WORKERS: 4
     
     working_directory: ~
 

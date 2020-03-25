@@ -255,7 +255,9 @@ has OnDataNode $!on-data .= new;
 has atomicint $.prio-count = 0;
 # Number of the highest priority queue where it's very likely to find some data. This attribute is always updated when
 # send receives a packet. A poll might set it to lower value if it finds an empty priority queue.
-has $!max-prio-updated = -1;
+has $!max-sent-prio = -1;
+# Number of the highest priority queue where we expect to find some data.
+has $!max-recv-prio = -1;
 # List of priority queues. For performance matters, it must be a nqp::list()
 has $!pq-list;
 has Lock $!prio-lock .= new;
@@ -299,16 +301,16 @@ method send(Mu \packet, Int:D $prio) {
         ($pq := self!pqueue($prio))
     );
     nqp::push($pq, packet);
-    # Set maximum priority value for the next poll operation to start with.
-    cas $!max-prio-updated, {
+    # Use Int.new to get different objectid in $!max-sent-prio container
+    cas $!max-sent-prio, {
         nqp::if(
-            nqp::isgt_i($prio, $!max-prio-updated),
+            nqp::isgt_i($prio, $!max-sent-prio),
             Int.new($prio),
             $_
         );
     }
     nqp::atomicinc_i($!elems);
-    if (my $old = $!on-data).awaited && !$!closed {
+    if (my $old = $!on-data).awaited {
         # Signal of new data if can. If $!on-data cannot be updated it means a cocurrent send has done the job already
         # and we must not care.
         if cas($!on-data, $old, OnDataNode.new) === $old {
@@ -355,18 +357,15 @@ method poll is raw {
     my $found := False;
     my $fprio = -1;
     if $!elems {
-        my $prio;
-        my $my-id;
-        my $mprio;
-        # Record the current max-prio-updated object to check later if it hasn't been updated while we're scanning the
-        # queues.
-        cas $!max-prio-updated, {
-            $prio = $_ + 1;
-            $mprio := $_
-        };
-        # We iterate starting with the latest $!max-prio-updated available to us. Then we try polling the first queue
-        # which has non-empty $!elems. This is not guaranteed that it will still have any data for us when we eventually
-        # call .poll on it but this way we surely not wasting time on empty ones.
+        # We iterate starting with the maximum priority where we expect to find available items. The going down the
+        # priorities queue looking for the first one which actually has any data for us. When done try updating the
+        my $max-sent = $!max-sent-prio;
+        cas($!max-sent-prio, $max-sent, 0);
+        my $prio =
+            (my $max-recv = cas($!max-recv-prio, {
+                # Use Int.new to get different objectid in $!max-recv-prio container
+                nqp::if(nqp::isgt_i($max-sent, $_), Int.new($max-sent), $_)
+            })) + 1;
         nqp::while(
             nqp::if(nqp::not_i($found), (--$prio >= 0)),
             nqp::unless(
@@ -377,22 +376,26 @@ method poll is raw {
                 )
             )
         );
-        # Update $!max-prio-updated if need and can. We're ok to change it only if the original object we used to start
+        # Update $!max-sent-prio if need and can. We're ok to change it only if the original object we used to start
         # the scan with hasn't been changed by a concurrent send operation.
         nqp::if(
-            nqp::islt_i($prio, $mprio),
-            cas($!max-prio-updated, $mprio, $prio)
+            nqp::islt_i($prio, $max-recv),
+            cas($!max-recv-prio, $max-recv, $prio)
         );
+    }
+    elsif $!closed && !$!drained {
+        # note "No elems, draining" if $!debug;
+        self!drain;
     }
     if $found {
         nqp::atomicdec_i($!elems);
-        self!drain if $!closed && !$!elems;
+        # note "No elems, draining" if $!debug && $!closed && ;
+        # self!drain if $!closed && !$!elems && !$!drained;
         $packet
     }
     else {
         # If no data found and the channel has been closed then it's time to report draining. No more packets will
         # appear here.
-        # self!drain if $!closed;
         Nil but NoData
     }
 }
@@ -407,7 +410,18 @@ method receive is raw {
             # Given ensures that we operate on the same atom even if it gets updated by a send in a concurrent thread.
             given $!on-data {
                 .awaited = True;
+                # note "-> await" if $!debug;
                 await Promise.anyof( .promise, $!drained-promise );
+                # note "<< await, elems: ", $!elems,
+                #      ", closed: ", $!closed,
+                #      ", drained: ", $!drained,
+                #      ", max-sent-prio: ", $!max-sent-prio
+                #      if $!debug;
+                # if $!debug && $!elems > 0 && $!max-sent-prio < 0 {
+                #     note "AAAAAAAAAAAAAAA!";
+                #     self!dump;
+                #     die "OOPS!";
+                # }
             }
         }
         else {
@@ -427,6 +441,23 @@ method Supply {
             else {
                 emit $v;
             }
+        }
+    }
+}
+
+has $!dumped = 0;
+method !dump {
+    my $od = $!dumped;
+    if cas($!dumped, $od, 1) != 0 {
+        return;
+    }
+    for ^$!prio-count -> $prio {
+        my $pq := nqp::atpos($!pq-list, $prio);
+        if nqp::elems($pq) {
+            note "\nPQ $prio: ", nqp::elems($pq), " -- ", nqp::atpos($pq, 0);
+        }
+        else {
+            $*ERR.print: " $prio"
         }
     }
 }

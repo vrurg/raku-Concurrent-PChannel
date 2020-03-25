@@ -4,9 +4,15 @@ os:
 language: perl6
 perl6:
   - latest
+  - '2019.11'
+  - '2020.02.1'
+  
 install:
   - rakudobrew build zef
-  - zef install --deps-only --/test .
+  - zef install --deps-only --test-depends --/test .
+  - zef install App::Prove6 --/test
+  - rakudobrew rehash
+
 script:
-  - PERL6LIB=$PWD/lib prove -e perl6 -vr --ext .t --ext .t6 --ext .rakutest t
+  - prove6 -v -l t
 sudo: false

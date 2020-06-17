@@ -1,17 +1,16 @@
 use Test::Async <When Base>;
 use Concurrent::PChannel;
 
-BEGIN {
-    %*ENV<RAKUDO_MAX_THREADS> = 1500;
-}
-
-$*SCHEDULER = ThreadPoolScheduler.new;
+BEGIN $*SCHEDULER = ThreadPoolScheduler.new: :max_threads(1500);
 
 my $conc-count = 1000;
 my $prios = 10;
 my $packet-count = 10000;
 
-plan $conc-count, :parallel;
+plan $conc-count,
+    :parallel,
+    :test-jobs($conc-count),
+    :when(<stress>);
 
 my $starter = Promise.new;
 

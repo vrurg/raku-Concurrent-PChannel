@@ -1,5 +1,5 @@
 use v6.c;
-use Test;
+use Test::Async;
 use Concurrent::PChannel;
 
 plan 4;

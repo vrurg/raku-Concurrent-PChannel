@@ -410,18 +410,7 @@ method receive is raw {
             # Given ensures that we operate on the same atom even if it gets updated by a send in a concurrent thread.
             given $!on-data {
                 .awaited = True;
-                # note "-> await" if $!debug;
                 await Promise.anyof( .promise, $!drained-promise );
-                # note "<< await, elems: ", $!elems,
-                #      ", closed: ", $!closed,
-                #      ", drained: ", $!drained,
-                #      ", max-sent-prio: ", $!max-sent-prio
-                #      if $!debug;
-                # if $!debug && $!elems > 0 && $!max-sent-prio < 0 {
-                #     note "AAAAAAAAAAAAAAA!";
-                #     self!dump;
-                #     die "OOPS!";
-                # }
             }
         }
         else {

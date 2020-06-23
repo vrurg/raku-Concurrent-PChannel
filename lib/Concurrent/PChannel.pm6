@@ -204,7 +204,7 @@ This library is free software; you can redistribute it and/or modify it under th
 =end pod
 use nqp;
 
-role NoData is export { };
+role NoData is export {};
 
 class X::PChannel::Priorities is Exception is export {
     has $.priorities is required;
@@ -216,7 +216,7 @@ class X::PChannel::Priorities is Exception is export {
 class X::PChannel::NegativePriority is Exception is export {
     has $.prio is required;
     method message {
-        "Priority must be a positive integer, but got '{$!prio.raku}'"
+        "Priority must be a positive integer, but got '{ $!prio.raku }'"
     }
 }
 
@@ -227,16 +227,7 @@ class X::PChannel::OpOnClosed is Exception is export {
     }
 }
 
-my class PQueue is repr('ConcBlockingQueue') { }
-
-# Atom of 'data available' semaphore. This works the following way: if a receive operation encounters 'no packets'
-# situation, it raises the awaited flag and starts awaiting for the promise. If send sees the flag to be raised it
-# replaces the atom ($!on-data) with a new one and then keeps the promise. At this moment all receive operations pending
-# will awake and race for any new packets available.
-my class OnDataNode {
-    has Promise $.promise .= new;
-    has $.awaited is rw = False;
-}
+my class PQueue is repr('ConcBlockingQueue') {}
 
 # The channel has been closed. Yet, some data might still be awailable for fetching!
 has Bool:D $.closed = False;
@@ -249,15 +240,21 @@ has Promise $.drained-promise .= new;
 # environment.
 has atomicint $.elems = 0;
 
-# The semaphore for awaiting receive operations.
-has OnDataNode $!on-data .= new;
+# Receive is Awaiting Promise. To be kept by a send to indicate data readiness.
+has Promise $!ra-promise = Nil;
+# Promise to be stored into $!ra-promise when time comes.
+has $!ra-new = Promise.new;
+# State variable for receive() method spinlock()
+has int $!ra-protect = 0;
+#has Lock $!ra-lock .= new;
+
 # Total number of priority queues allocated
 has atomicint $.prio-count = 0;
 # Number of the highest priority queue where it's very likely to find some data. This attribute is always updated when
 # send receives a packet. A poll might set it to lower value if it finds an empty priority queue.
 has $!max-sent-prio = -1;
 # Number of the highest priority queue where we expect to find some data.
-has $!max-recv-prio = -1;
+has int $!max-recv-prio = -1;
 # List of priority queues. For performance matters, it must be a nqp::list()
 has $!pq-list;
 has Lock $!prio-lock .= new;
@@ -265,7 +262,8 @@ has Lock $!prio-lock .= new;
 submethod TWEAK(Int:D :$priorities = 1, |) {
     X::PChannel::Priorities.new(:$priorities).throw unless $priorities > 0;
     $!pq-list := nqp::list();
-    self!pqueue($priorities - 1); # Pre-create priorities.
+    # Pre-create priorities.
+    self!pqueue($priorities - 1);
 }
 
 # Must only be called if no priority queue is found for a specified priority. It pre-creates necessary entries in
@@ -278,45 +276,41 @@ method !pqueue(Int:D $prio) is raw {
                 nqp::isle_i($!prio-count, $new-count),
                 nqp::stmts(
                     nqp::push($!pq-list, PQueue.new),
-                    nqp::atomicinc_i($!prio-count)
-                )
-            );
+                    nqp::atomicinc_i($!prio-count)));
         }
     }
     nqp::atpos($!pq-list, $prio)
 }
 
+method !wake-receivers {
+    loop {
+        my $ra-promise = $!ra-promise;
+        if cas($!ra-promise, $ra-promise, Promise) === $ra-promise {
+            .keep with $ra-promise;
+            return
+        }
+    }
+}
+
 method send(Mu \packet, Int:D $prio) {
     nqp::if(
         nqp::islt_i($prio, 0),
-        X::PChannel::NegativePriority.new(:$prio).throw
-    );
+        X::PChannel::NegativePriority.new(:$prio).throw);
     nqp::if(
         $!closed,
-        X::PChannel::OpOnClosed.new(:op<send>).throw
-    );
+        X::PChannel::OpOnClosed.new(:op<send>).throw);
     my $pq := nqp::atpos($!pq-list, $prio);
     nqp::if(
-        nqp::unless(nqp::isge_i($prio, $!prio-count), nqp::isnull($pq)),
-        ($pq := self!pqueue($prio))
-    );
+        nqp::unless(
+            nqp::isge_i($prio, $!prio-count),
+            nqp::isnull($pq)),
+        ($pq := self!pqueue($prio)));
+    my $entry-elems = $!elems⚛++;
     nqp::push($pq, packet);
-    # Use Int.new to get different objectid in $!max-sent-prio container
     cas $!max-sent-prio, {
-        nqp::if(
-            nqp::isgt_i($prio, $!max-sent-prio),
-            Int.new($prio),
-            $_
-        );
+        nqp::if(nqp::isgt_i($prio, $!max-sent-prio), $prio, $_);
     }
-    nqp::atomicinc_i($!elems);
-    if (my $old = $!on-data).awaited {
-        # Signal of new data if can. If $!on-data cannot be updated it means a cocurrent send has done the job already
-        # and we must not care.
-        if cas($!on-data, $old, OnDataNode.new) === $old {
-            $old.promise.keep(True);
-        }
-    }
+    self!wake-receivers unless $entry-elems;
 }
 
 method close {
@@ -324,13 +318,13 @@ method close {
         # Two concurrent closes? Not good.
         X::PChannel::OpOnClosed.new(:op<close>).throw;
     }
-    $!closed-promise.keep(True);
-    $!on-data.promise.keep(True);
+    $!closed-promise.keep;
+    self!wake-receivers;
 }
 
 method !drain {
     unless cas($!drained, False, True) {
-        $!drained-promise.keep(True);
+        $!drained-promise.keep;
     }
 }
 
@@ -349,68 +343,62 @@ method fail($cause) {
         X::PChannel::OpOnClosed.new(:op<close>).throw;
     }
     $!closed-promise.break($cause);
-    $!on-data.promise.keep(True);
 }
 
 method poll is raw {
     my $packet;
     my $found := False;
-    my $fprio = -1;
-    if $!elems {
-        # We iterate starting with the maximum priority where we expect to find available items. The going down the
-        # priorities queue looking for the first one which actually has any data for us. When done try updating the
-        my $max-sent = $!max-sent-prio;
-        cas($!max-sent-prio, $max-sent, 0);
-        my $prio =
-            (my $max-recv = cas($!max-recv-prio, {
-                # Use Int.new to get different objectid in $!max-recv-prio container
-                nqp::if(nqp::isgt_i($max-sent, $_), Int.new($max-sent), $_)
+    my $elems;
+    cas $!elems, { ($elems = $_) ?? $_ - 1 !! $_ };
+    if $elems {
+        # Even though we've been promised to have an item in a queue, it is possible that the item hasn't been pushed by
+        # send() yet. So, loop until find it.
+        until $found {
+            # We iterate starting with the maximum priority where we expect to find available items. Then going down the
+            # priorities queue looking for the first one which actually has any data for us. When done try updating the
+            # $!max-recv-prio for the next poll() invocation.
+            my $max-sent = $!max-sent-prio;
+            cas($!max-sent-prio, $max-sent, 0);
+            my $prio = (my $max-recv = cas($!max-recv-prio, {
+                nqp::if(nqp::isgt_i($max-sent, $_), $max-sent, $_)
             })) + 1;
-        nqp::while(
-            nqp::if(nqp::not_i($found), (--$prio >= 0)),
-            nqp::unless(
-                nqp::isnull($packet := nqp::queuepoll(nqp::atpos($!pq-list, $prio))),
-                nqp::stmts(
-                    ($found := True),
-                    ($fprio = $prio)
-                )
-            )
-        );
-        # Update $!max-sent-prio if need and can. We're ok to change it only if the original object we used to start
-        # the scan with hasn't been changed by a concurrent send operation.
-        nqp::if(
-            nqp::islt_i($prio, $max-recv),
-            cas($!max-recv-prio, $max-recv, $prio)
-        );
+            nqp::while(nqp::if(nqp::not_i($found), (--$prio >= 0)), nqp::unless(
+                nqp::isnull($packet := nqp::queuepoll(nqp::atpos($!pq-list, $prio))), ($found := True)));
+            # Update $!max-sent-prio if need and can. We're ok to change it only if the original object we used to start# the scan with hasn't been changed by a concurrent send operation.
+            nqp::if(nqp::islt_i($prio, $max-recv), cas($!max-recv-prio, $max-recv, $prio));
+        }
     }
     elsif $!closed && !$!drained {
-        # note "No elems, draining" if $!debug;
         self!drain;
     }
-    if $found {
-        nqp::atomicdec_i($!elems);
-        # note "No elems, draining" if $!debug && $!closed && ;
-        # self!drain if $!closed && !$!elems && !$!drained;
-        $packet
-    }
-    else {
-        # If no data found and the channel has been closed then it's time to report draining. No more packets will
-        # appear here.
-        Nil but NoData
-    }
+    $found ?? $packet !! (Nil but NoData)
 }
 
 method receive is raw {
     loop {
         if $!drained {
-            return Failure.new( X::PChannel::OpOnClosed.new(:op<receive>) );
+            fail X::PChannel::OpOnClosed.new(:op<receive>);
         }
-        my $packet := $.poll;
-        if $packet ~~ NoData {
-            # Given ensures that we operate on the same atom even if it gets updated by a send in a concurrent thread.
-            given $!on-data {
-                .awaited = True;
-                await Promise.anyof( .promise, $!drained-promise );
+        my $ra-promise;
+        unless ⚛$!closed {
+            LEAVE nqp::atomicstore_i($!ra-protect,0);
+            my $done := 0;
+            nqp::until(
+                $done,
+                nqp::unless(nqp::cas_i($!ra-protect,0,1), ($done := 1)));
+#            $!ra-lock.lock;
+#            LEAVE $!ra-lock.unlock;
+            if (my $ra-prev = cas($!ra-promise, Promise, $!ra-new)) !=== Promise {
+                $ra-promise = $ra-prev;
+            }
+            else {
+                $ra-promise = $!ra-new;
+                $!ra-new = Promise.new;
+            }
+        }
+        if (my $packet := self.poll) ~~ NoData {
+            unless ⚛$!closed {
+                await Promise.anyof($ra-promise, $!drained-promise, $!closed-promise);
             }
         }
         else {

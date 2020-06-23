@@ -1,5 +1,5 @@
 use v6.c;
-unit class Concurrent::PChannel:ver<0.0.2>:auth<github:vrurg>;
+unit class Concurrent::PChannel:ver<0.0.3>:auth<github:vrurg>;
 
 =begin pod
 
@@ -63,14 +63,14 @@ for ^WORKER-COUNT {
 
 =head2 Performance
 
-The performance was the primary target of this module development. It is implemented using highly-concurrent lock-less
-(with one little exception) approach. Benchmarking of sending items of 1000 different priorities shows that sending
-speed is only 1.9-2.3 times slower than that of the built-in C<Channel> class; while receiving is only 1.2-1.3 times
-slower comparing to C<Channel>.
+The performance was the primary target of this module development. It is implemented using highly-concurrent almost
+lock-less approach. Benchmarking of different numbers of sending/receiving threads (measured over C<receive()> method)
+results in send operations been 1.3-8 times slower than sending over the core C<Channel>; receiving is 1.1-6 times
+slower. The difference in numbers is only determined by the ratio of sending/receving threads.
 
-What's more important, the speed is almost independant of the number of priorities used! I.e. it doesn't matter if code
-is using 10 or 1000 priorities – the time needed to process the queue would only be dependent on the number of items
-sent.
+What's more important, the speed is almost independent of the number of priorities used! I.e. it doesn't matter if code
+is using 10 or 1000 priorities – the time needed to process the two channels would only be dependent on the number of
+items sent over them.
 
 =head2 Terms
 

@@ -1,22 +1,22 @@
 {
-  "name": "Concurrent::PChannel",
-  "description": "prioritized channel",
-  "version": "0.0.2",
-  "perl": "6.c",
-  "authors": [
+  "auth" : "github:vrurg",
+  "authors" : [
     "Vadim Belman"
   ],
-  "auth": "github:vrurg",
-  "depends": [],
-  "build-depends": [],
-  "test-depends": [
+  "build-depends" : [ ],
+  "depends" : [ ],
+  "description" : "prioritized channel",
+  "license" : "Artistic-2.0",
+  "name" : "Concurrent::PChannel",
+  "perl" : "6.c",
+  "provides" : {
+    "Concurrent::PChannel" : "lib/Concurrent/PChannel.pm6"
+  },
+  "resources" : [ ],
+  "source-url" : "https://github.com/vrurg/raku-Concurrent-PChannel.git",
+  "tags" : [ ],
+  "test-depends" : [
     "Test::Async"
   ],
-  "provides": {
-    "Concurrent::PChannel": "lib/Concurrent/PChannel.pm6"
-  },
-  "resources": [],
-  "license": "Artistic-2.0",
-  "tags": [],
-  "source-url": "https://github.com/vrurg/raku-Concurrent-PChannel.git"
+  "version" : "0.0.3"
 }

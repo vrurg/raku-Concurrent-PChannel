@@ -8,3 +8,4 @@
 .idea/
 /Concurrent-PChannel-*
 *.iml
+example.raku

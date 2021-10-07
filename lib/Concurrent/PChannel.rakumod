@@ -1,5 +1,5 @@
 use v6.c;
-unit class Concurrent::PChannel:ver<0.0.3>:auth<github:vrurg>;
+unit class Concurrent::PChannel:ver<0.0.3>:auth<github:vrurg>:api<0.0.1>;
 
 =begin pod
 
@@ -16,8 +16,8 @@ use Concurrent::PChannel;
 my Concurrent::PChannel:D $pchannel .= new( :priorities(10) );
 $pchannel.send("low prio", 0);
 $pchannel.send("high prio", 1);
-say $pchannel.receive; ‘high prio’
-say $pchannel.receive; ‘low prio’
+say $pchannel.receive; # ‘high prio’
+say $pchannel.receive; # ‘low prio’
 
 =end code
 
@@ -345,6 +345,7 @@ method fail($cause) {
     $!closed-promise.break($cause);
 }
 
+my atomicint $first = 0;
 method poll is raw {
     my $packet;
     my $found := False;
@@ -364,7 +365,10 @@ method poll is raw {
             })) + 1;
             nqp::while(nqp::if(nqp::not_i($found), (--$prio >= 0)), nqp::unless(
                 nqp::isnull($packet := nqp::queuepoll(nqp::atpos($!pq-list, $prio))), ($found := True)));
-            # Update $!max-sent-prio if need and can. We're ok to change it only if the original object we used to start# the scan with hasn't been changed by a concurrent send operation.
+            # ABA problem is not really relevant here. It is possible to happen but because in case of failure we'll
+            # loop over again there're good chances that with the next loop we'll get re-calculated $max-recv which
+            # would allow us to find the item. This will happen either thanx to $!max-sent-prio or another poll() thread
+            # will adjust $!max-recv-prio.
             nqp::if(nqp::islt_i($prio, $max-recv), cas($!max-recv-prio, $max-recv, $prio));
         }
     }
@@ -437,4 +441,28 @@ method !dump {
             $*ERR.print: " $prio"
         }
     }
+}
+
+our sub META6 {
+    use META6;
+    name           => 'Concurrent::PChannel',
+    description    => 'Concurrency-safe prioritized channel',
+    version        => $?PACKAGE.^ver,
+    api            => $?PACKAGE.^api,
+	auth		   => $?PACKAGE.^auth,
+    perl-version   => Version.new('6.*'),
+    raku-version   => Version.new('6.*'),
+    depends        => [ ],
+    test-depends   => <Test::Async>,
+    tags           => <async concurrent channel>,
+    authors        => ['Vadim Belman <vrurg@cpan.org>'],
+    source-url     => "https://github.com/vrurg/raku-Concurrent-PChannel.git",
+    support        => META6::Support.new(
+        source          => "https://github.com/vrurg/raku-Concurrent-PChannel.git",
+    ),
+    provides => {
+		'Concurrent::PChannel' => 'lib/Concurrent/PChannel.rakumod',
+    },
+    license        => 'Artistic-2.0',
+    production     => True,
 }

@@ -1,0 +1,20 @@
+=begin pod
+=CHANGELOG
+
+=head v0.0.4
+
+Migrate to zef ecosystem
+
+=head2 v0.0.3
+
+=item Reimplement send()/receive() synchnization
+
+=head2 v0.0.2
+
+=item Fixed a race condition
+
+=head2 v0.0.1
+
+=item Initial version
+
+=end pod

@@ -444,25 +444,5 @@ method !dump {
 }
 
 our sub META6 {
-    use META6;
-    name           => 'Concurrent::PChannel',
-    description    => 'Concurrency-safe prioritized channel',
-    version        => $?PACKAGE.^ver,
-    api            => $?PACKAGE.^api,
-	auth		   => $?PACKAGE.^auth,
-    perl-version   => Version.new('6.*'),
-    raku-version   => Version.new('6.*'),
-    depends        => [ ],
-    test-depends   => <Test::Async>,
-    tags           => <async concurrent channel>,
-    authors        => ['Vadim Belman <vrurg@cpan.org>'],
-    source-url     => "https://github.com/vrurg/raku-Concurrent-PChannel.git",
-    support        => META6::Support.new(
-        source          => "https://github.com/vrurg/raku-Concurrent-PChannel.git",
-    ),
-    provides => {
-		'Concurrent::PChannel' => 'lib/Concurrent/PChannel.rakumod',
-    },
-    license        => 'Artistic-2.0',
-    production     => True,
+    $?DISTRIBUTION.meta
 }
